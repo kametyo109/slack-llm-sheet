@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from llm_parser import enrich_slack_app
 from sheets_logger import log_to_sheets
 
+
 load_dotenv()
 
 app = FastAPI()
