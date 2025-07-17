@@ -1,44 +1,43 @@
+import re
 import os
-import openai
 import json
-from dotenv import load_dotenv
+from openai import OpenAI
 
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def enrich_with_llm(parsed_dict):
+def extract_metadata(text):
+    github_match = re.search(r"https?://github\.com/\S+", text)
+    mention_match = re.search(r"@(\w+)", text)
+
+    return {
+        "github_link": github_match.group(0) if github_match else None,
+        "mentioned_user": mention_match.group(1) if mention_match else None
+    }
+
+def enrich_with_llm(parsed):
     prompt = f"""
-You are helping log GitHub projects into a structured Google Sheet. Based on the information below, extract and fill in the following fields:
+You are an assistant that extracts structured metadata for a GitHub project.
+Return a JSON with the following fields:
+- app_name
+- purpose
+- author
+- github_link
+- paper_link (optional)
 
-1. Application Name
-2. Description of what it does (1–2 sentences max)
-3. Developer (individual or org name)
-4. GitHub Link (keep as-is)
-5. Paper Link (only if clearly mentioned; else blank)
-
-Input:
-{parsed_dict}
-
-Output format (as JSON):
-{{
-  "name": "...",
-  "description": "...",
-  "author": "...",
-  "github": "...",
-  "paper": "..."
-}}
+Metadata: {parsed}
+Respond in JSON only.
 """
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{ "role": "user", "content": prompt }]
     )
 
-    content = response["choices"][0]["message"]["content"]
+    raw_content = response.choices[0].message.content.strip()
 
     try:
-        parsed_output = json.loads(content)
-    except Exception:
-        parsed_output = parsed_dict  # fallback to GitHub scrape only
+        enriched = json.loads(raw_content)
+    except json.JSONDecodeError:
+        enriched = {"error": "LLM output could not be parsed", "raw": raw_content}
 
-    return parsed_output
+    return enriched
