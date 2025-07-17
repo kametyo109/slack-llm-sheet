@@ -1,18 +1,12 @@
-import requests
-from bs4 import BeautifulSoup
-
-def parse_github_repo(url):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    name = soup.find("strong", {"itemprop": "name"})
-    description = soup.find("p", {"class": "f4 my-3"})
-    author = soup.find("span", {"class": "author"})
-
-    return {
-        "name": name.text.strip() if name else "",
-        "description": description.text.strip() if description else "",
-        "author": author.text.strip() if author else "",
-        "github": url,
-        "paper": ""
-    }
+def parse_github_repo(url: str):
+    try:
+        parts = url.strip("/").split("/")
+        if "github.com" in parts:
+            idx = parts.index("github.com")
+            author, repo = parts[idx + 1], parts[idx + 2]
+        else:
+            author, repo = parts[-2], parts[-1]
+        return author, repo
+    except Exception as e:
+        print(f"Error parsing GitHub URL: {e}")
+        return None, None

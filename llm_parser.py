@@ -1,41 +1,32 @@
-# llm_parser.py
-import os
-import re
 import openai
-import json
+import os
+from github_parser import parse_github_repo
 
-# Set API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def extract_metadata(text):
-    github_match = re.search(r"https?://github\.com/\S+", text)
-    mention_match = re.search(r"@(\w+)", text)
+def enrich_repository(text: str):
+    import re
+    match = re.search(r"https://github\.com/\S+", text)
+    if not match:
+        return {}
 
-    return {
-        "github_link": github_match.group(0) if github_match else None,
-        "mentioned_user": mention_match.group(1) if mention_match else None
-    }
+    github_url = match.group()
+    author, name = parse_github_repo(github_url)
 
-def enrich_with_llm(parsed):
-    prompt = f"""
-You are an assistant that extracts structured metadata for a GitHub project.
-Return a JSON with the following fields:
-- app_name
-- purpose
-- author
-- github_link
-- paper_link (optional)
+    prompt = f"Extract metadata from this GitHub repo link: {github_url}. Return as JSON with fields: name, author, description, paper_url (if any), and one-word tag."
 
-Metadata: {parsed}
-
-Respond in JSON only.
-"""
-
-    response = openai.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    return json.loads(response.choices[0].message.content.strip())
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3
+        )
+        content = response["choices"][0]["message"]["content"]
+        result = eval(content)
+        result["github_url"] = github_url
+        return result
+    except Exception as e:
+        print(f"Error calling OpenAI: {e}")
+        return {}
