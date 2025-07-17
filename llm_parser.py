@@ -1,5 +1,4 @@
 # llm_parser.py
-
 import os
 import re
 import openai
@@ -39,5 +38,4 @@ Respond in JSON only.
         ]
     )
 
-    # This returns a string. We parse it to dict before returning.
     return json.loads(response.choices[0].message.content.strip())
