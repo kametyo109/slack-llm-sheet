@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
-from llm_parser import enrich_repository
+from llm_parser import enrich_slack_app
 from sheets_logger import log_to_sheets
 
 load_dotenv()
@@ -12,7 +12,7 @@ app = FastAPI()
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return "<h1>Slack Enrichment App is running.</h1>"
+    return "<h1>Slack App Enrichment Service is running.</h1>"
 
 
 @app.post("/slack/events")
@@ -31,8 +31,9 @@ async def slack_events(request: Request):
         ts = event.get("ts", "")
         print(f"Received event: {text} from {user} at {ts}")
 
-        if "http" in text and "@" in text:
-            enriched = enrich_repository(text)
+        # Look for Slack app links
+        if "slack.com/apps/" in text or "slack.com/marketplace/" in text:
+            enriched = enrich_slack_app(text)
             if enriched:
                 print(f"Enriched result: {enriched}")
                 log_to_sheets(enriched)
