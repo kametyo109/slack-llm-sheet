@@ -18,6 +18,7 @@ load_dotenv()
 app = FastAPI()
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 
+
 @app.post("/slack/events")
 async def slack_events(request: Request):
     body = await request.body()
@@ -56,3 +57,18 @@ async def slack_events(request: Request):
         return {"status": "ok"}
 
     return {"status": "ignored"}
+
+
+@app.post("/parse")
+async def parse_text(request: Request):
+    data = await request.json()
+    text = data.get("text", "")
+    urls = [word for word in text.split() if word.startswith("http")]
+    if urls:
+        repo_url = urls[0]
+        parsed = github_parser.parse_github_repo(repo_url)
+        enriched = llm_parser.enrich_with_llm(parsed)
+        enriched["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sheets_logger.log_to_sheets(enriched)
+        return {"status": "logged", "data": enriched}
+    return {"status": "no_url_found"}
