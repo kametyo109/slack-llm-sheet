@@ -19,7 +19,6 @@ GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")  # JSON string
 # === FastAPI App ===
 app = FastAPI()
 
-
 # === Slack Signature Verification ===
 def verify_slack_signature(slack_signature, timestamp, body):
     if abs(time.time() - int(timestamp)) > 60 * 5:
@@ -34,7 +33,6 @@ def verify_slack_signature(slack_signature, timestamp, body):
 
     return hmac.compare_digest(my_signature, slack_signature)
 
-
 # === Google Sheets Client ===
 def get_sheet_client():
     creds_dict = json.loads(GOOGLE_CREDS_JSON)
@@ -42,7 +40,6 @@ def get_sheet_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client.open(SHEET_NAME).sheet1
-
 
 # === Slack Events Endpoint ===
 @app.post("/slack/events")
@@ -54,50 +51,58 @@ async def slack_events(
     raw_body = await request.body()
     body_str = raw_body.decode("utf-8")
 
-    # Verification challenge
     try:
         data = json.loads(body_str)
     except:
         return JSONResponse(status_code=400, content={"error": "invalid json"})
 
+    # URL verification (initial Slack challenge)
     if data.get("type") == "url_verification":
         return JSONResponse(content={"challenge": data["challenge"]})
 
-    # Signature check
+    # Signature verification
     if not verify_slack_signature(x_slack_signature, x_slack_request_timestamp, body_str):
         return JSONResponse(status_code=403, content={"error": "invalid signature"})
 
-    # Handle app mention events
     event = data.get("event", {})
-    if event.get("type") == "app_mention":
-        text = event.get("text", "")
-        user = event.get("user", "")
-        ts = event.get("ts", "")
-        print(f"Received mention: {text} from {user} at {ts}")
+    event_type = event.get("type")
 
-        # Enrich
-        async with httpx.AsyncClient() as client:
-            response = await client.post(ENRICHMENT_API_URL, json={"text": text})
-            if response.status_code == 200:
-                result = response.json()
-                enriched = result.get("enriched_metadata", {})
-                enriched["input"] = text
-                enriched["user"] = user
-                enriched["timestamp"] = ts
+    if event_type in ["app_mention", "message"]:
+        # Filter only real user messages (not bot messages or message edits)
+        if "subtype" in event:
+            return JSONResponse(content={"status": "ignored"})
 
-                # Append to Google Sheet
-                sheet = get_sheet_client()
-                sheet.append_row([
-                    enriched.get("input", ""),
-                    enriched.get("app_name", ""),
-                    enriched.get("purpose", ""),
-                    enriched.get("author", ""),
-                    enriched.get("github_link", ""),
-                    enriched.get("paper_link", ""),
-                    enriched.get("user", ""),
-                    enriched.get("timestamp", "")
-                ])
-            else:
-                print(f"Enrichment failed: {response.text}")
+        # In DMs, type is "message" and channel_type is "im"
+        channel_type = event.get("channel_type")
+        if event_type == "app_mention" or channel_type == "im":
+            text = event.get("text", "")
+            user = event.get("user", "")
+            ts = event.get("ts", "")
+            print(f"Received message: {text} from {user} at {ts}")
+
+            # Enrich
+            async with httpx.AsyncClient() as client:
+                response = await client.post(ENRICHMENT_API_URL, json={"text": text})
+                if response.status_code == 200:
+                    result = response.json()
+                    enriched = result.get("enriched_metadata", {})
+                    enriched["input"] = text
+                    enriched["user"] = user
+                    enriched["timestamp"] = ts
+
+                    # Append to Google Sheet
+                    sheet = get_sheet_client()
+                    sheet.append_row([
+                        enriched.get("input", ""),
+                        enriched.get("app_name", ""),
+                        enriched.get("purpose", ""),
+                        enriched.get("author", ""),
+                        enriched.get("github_link", ""),
+                        enriched.get("paper_link", ""),
+                        enriched.get("user", ""),
+                        enriched.get("timestamp", "")
+                    ])
+                else:
+                    print(f"Enrichment failed: {response.text}")
 
     return JSONResponse(content={"status": "ok"})
