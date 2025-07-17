@@ -1,11 +1,17 @@
-import re
-import os
-import json
-from openai import OpenAI
+# llm_parser.py
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+import os
+import re
+import json
+import openai
+
+# Load API key from environment variable
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def extract_metadata(text):
+    """
+    Extracts GitHub link and mentioned Slack username (e.g., @user) from the input text.
+    """
     github_match = re.search(r"https?://github\.com/\S+", text)
     mention_match = re.search(r"@(\w+)", text)
 
@@ -15,6 +21,10 @@ def extract_metadata(text):
     }
 
 def enrich_with_llm(parsed):
+    """
+    Given metadata, use OpenAI GPT to return structured app metadata.
+    Returns a dictionary with fields like app_name, purpose, author, etc.
+    """
     prompt = f"""
 You are an assistant that extracts structured metadata for a GitHub project.
 Return a JSON with the following fields:
@@ -25,19 +35,23 @@ Return a JSON with the following fields:
 - paper_link (optional)
 
 Metadata: {parsed}
+
 Respond in JSON only.
 """
 
-    response = client.chat.completions.create(
+    response = openai.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[{ "role": "user", "content": prompt }]
+        messages=[
+            { "role": "user", "content": prompt }
+        ]
     )
 
-    raw_content = response.choices[0].message.content.strip()
+    content = response.choices[0].message.content.strip()
 
     try:
-        enriched = json.loads(raw_content)
+        return json.loads(content)
     except json.JSONDecodeError:
-        enriched = {"error": "LLM output could not be parsed", "raw": raw_content}
-
-    return enriched
+        return {
+            "error": "Could not parse LLM response as JSON",
+            "raw_response": content
+        }
