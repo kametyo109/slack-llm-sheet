@@ -3,7 +3,7 @@ import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-def log_to_sheets(data):
+def log_to_sheets(link):
     creds_json_path = os.getenv("GOOGLE_CREDENTIALS_JSON", "credentials.json")
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
 
@@ -21,7 +21,6 @@ def log_to_sheets(data):
             creds_json_path,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-
         client = gspread.authorize(creds)
         print("[Sheets] Connected to Google Sheets API.")
 
@@ -29,10 +28,9 @@ def log_to_sheets(data):
         print(f"[Sheets] Opened spreadsheet: {spreadsheet_id}")
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        row = [timestamp, data["title"], data["description"], data["link"]]
-
+        row = [timestamp, link]
         sheet.append_row(row)
-        print(f"[Sheets] Successfully logged row: {row}")
+        print(f"[Sheets] Successfully logged: {row}")
 
     except Exception as e:
         print(f"[Sheets] ERROR while logging to Sheets: {e}")
