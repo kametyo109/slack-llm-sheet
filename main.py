@@ -1,62 +1,38 @@
 import os
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 from dotenv import load_dotenv
-from llm_parser import enrich_slack_app
 from sheets_logger import log_to_sheets
 
 load_dotenv()
 
 app = FastAPI()
 
-
-class EnrichmentRequest(BaseModel):
-    text: str
-
-
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return "<h1>Slack App Enrichment Service is running.</h1>"
-
+    return "<h1>Slack Link Logger is running.</h1>"
 
 @app.post("/slack/events")
 async def slack_events(request: Request):
     payload = await request.json()
 
-    # Slack URL verification challenge
-    if "type" in payload and payload["type"] == "url_verification":
-        return {"challenge": payload["challenge"]}
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload.get("challenge")}
 
-    # Handle events
-    if "event" in payload:
-        event = payload["event"]
-        text = event.get("text", "")
-        user = event.get("user", "")
-        ts = event.get("ts", "")
-        print(f"Received event: {text} from {user} at {ts}")
+    event = payload.get("event", {})
+    text = event.get("text", "")
+    user = event.get("user", "")
+    ts = event.get("ts", "")
+    print(f"[Slack] Received event: {text} from {user} at {ts}")
 
-        if "slack.com/apps/" in text or "slack.com/marketplace/" in text or "github.com" in text:
-            enriched = enrich_slack_app(text)
-            if enriched:
-                print(f"Enriched result: {enriched}")
-                log_to_sheets(enriched)
-            else:
-                print("Enrichment failed or returned empty.")
+    for word in text.split():
+        print(f"[Debug] Checking word: {word}")
+        if word.startswith("http://") or word.startswith("https://"):
+            print(f"[Slack] Detected link: {word}")
+            try:
+                log_to_sheets(link=word)
+                print("[Slack] log_to_sheets() called successfully.")
+            except Exception as e:
+                print(f"[Slack] Error while calling log_to_sheets(): {e}")
 
     return {"status": "ok"}
-
-
-@app.post("/enrich")
-async def enrich(data: EnrichmentRequest):
-    try:
-        enriched = enrich_slack_app(data.text)
-        if enriched:
-            print(f"Enriched result: {enriched}")
-            log_to_sheets(enriched)
-            return {"status": "logged", "enriched": enriched}
-        else:
-            return {"status": "failed", "reason": "Empty result"}
-    except Exception as e:
-        print(f"Enrichment failed: {str(e)}")
-        return {"status": "error", "detail": str(e)}
