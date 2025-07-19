@@ -2,6 +2,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 from openai import OpenAI
+import json
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -11,21 +12,21 @@ def summarize_webpage(url):
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
         text = soup.get_text(separator="\n", strip=True)
-        text = text[:3000]  # Trim for token limit
+        text = text[:3000]  # Limit size
 
         prompt = f"""
 You are a helpful assistant. A user visited the following website and wants a short summary.
+
 URL: {url}
 
-Based on the following content, please return:
-- Title of the page
-- Brief description (1-2 sentences max)
+Based on the content, return a JSON object:
+{{
+  "title": "...",
+  "description": "..."
+}}
 
 Content:
 {text}
-
-Return as JSON in this format:
-{{"title": "...", "description": "..."}}
 """
 
         completion = client.chat.completions.create(
@@ -35,10 +36,8 @@ Return as JSON in this format:
         )
 
         raw = completion.choices[0].message.content.strip()
-        print(f"[LLM] Raw response: {raw}")
+        print(f"[LLM] Raw response from OpenAI: {raw}")
 
-        # Eval safely
-        import json
         return json.loads(raw)
 
     except Exception as e:
