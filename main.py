@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 from sheets_logger import log_to_sheets
+from llm_parser import summarize_webpage  # Use OpenAI
 
 load_dotenv()
 
@@ -16,25 +17,30 @@ async def root():
 async def slack_events(request: Request):
     payload = await request.json()
 
-    # Handle Slack URL verification (first-time setup)
     if payload.get("type") == "url_verification":
         return {"challenge": payload.get("challenge")}
 
-    # Handle Slack message events
     event = payload.get("event", {})
     text = event.get("text", "")
     user = event.get("user", "")
     ts = event.get("ts", "")
     print(f"[Slack] Received event: {text} from {user} at {ts}")
 
-    # Extract and clean any URLs
     for word in text.split():
         cleaned = word.strip("<>")
         print(f"[Debug] Checking word: {cleaned}")
         if cleaned.startswith("http://") or cleaned.startswith("https://"):
             print(f"[Slack] Detected link: {cleaned}")
             try:
-                log_to_sheets(link=cleaned)
+                summary = summarize_webpage(cleaned)
+                title = summary.get("title", "N/A")
+                description = summary.get("description", "N/A")
+
+                log_to_sheets({
+                    "title": title,
+                    "description": description,
+                    "link": cleaned
+                })
                 print("[Slack] log_to_sheets() called successfully.")
             except Exception as e:
                 print(f"[Slack] Error while calling log_to_sheets(): {e}")
