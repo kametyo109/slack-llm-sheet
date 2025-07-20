@@ -3,11 +3,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 from sheets_logger import log_to_sheets
-from llm_parser import summarize_webpage  # Use OpenAI
+from llm_parser import summarize_webpage
 
 load_dotenv()
 
 app = FastAPI()
+recent_ts = set()  # Cache of processed timestamps to prevent duplicate logging
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -17,6 +18,7 @@ async def root():
 async def slack_events(request: Request):
     payload = await request.json()
 
+    # Handle Slack URL verification
     if payload.get("type") == "url_verification":
         return {"challenge": payload.get("challenge")}
 
@@ -24,10 +26,18 @@ async def slack_events(request: Request):
     text = event.get("text", "")
     user = event.get("user", "")
     ts = event.get("ts", "")
+
     print(f"[Slack] Received event: {text} from {user} at {ts}")
 
+    # ✅ Deduplicate Slack events by timestamp
+    if ts in recent_ts:
+        print(f"[Slack] Duplicate event detected (ts: {ts}) — skipping.")
+        return {"status": "duplicate_skipped"}
+    recent_ts.add(ts)
+
     for word in text.split():
-        cleaned = word.strip("<>")
+        # Strip Slack link formatting and Slack's display alias
+        cleaned = word.strip("<>").split("|")[0]
         print(f"[Debug] Checking word: {cleaned}")
         if cleaned.startswith("http://") or cleaned.startswith("https://"):
             print(f"[Slack] Detected link: {cleaned}")

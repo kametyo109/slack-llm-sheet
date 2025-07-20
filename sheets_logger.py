@@ -11,6 +11,7 @@ def log_to_sheets(data):
         return
 
     try:
+        # Load credentials
         creds_base64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
         if creds_base64:
             creds_path = "/tmp/credentials.json"
@@ -24,13 +25,16 @@ def log_to_sheets(data):
                 print(f"[Sheets] ERROR: Credentials file not found at {creds_path}")
                 return
 
+        # Authorize
         creds = Credentials.from_service_account_file(
             creds_path,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
         client = gspread.authorize(creds)
         sheet = client.open_by_key(spreadsheet_id).sheet1
+        print(f"[Sheets] Connected to spreadsheet: {spreadsheet_id}")
 
+        # Build row
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         row = [
             timestamp,
@@ -38,8 +42,10 @@ def log_to_sheets(data):
             data.get("description", "N/A"),
             data.get("link", "N/A")
         ]
-        sheet.append_row(row)
-        print(f"[Sheets] Successfully logged row: {row}")
+
+        # Insert at top (below header)
+        sheet.insert_row(row, index=2)
+        print(f"[Sheets] Inserted row at top: {row}")
 
     except Exception as e:
         print(f"[Sheets] ERROR while logging to Sheets: {e}")

@@ -16,6 +16,7 @@ def summarize_webpage(url):
 
         prompt = f"""
 You are a helpful assistant. A user visited the following website and wants a short summary.
+Please always respond in English. The user works for a drug discovery company so please write the summary from this perspective.
 
 URL: {url}
 
