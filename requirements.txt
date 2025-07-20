@@ -7,3 +7,5 @@ requests
 beautifulsoup4
 gspread
 oauth2client
+selenium==4.21.0
+webdriver-manager==4.0.1
