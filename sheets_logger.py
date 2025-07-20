@@ -25,7 +25,7 @@ def log_to_sheets(data):
                 print(f"[Sheets] ERROR: Credentials file not found at {creds_path}")
                 return
 
-        # Authenticate and connect to sheet
+        # Authenticate
         creds = Credentials.from_service_account_file(
             creds_path,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
@@ -34,17 +34,7 @@ def log_to_sheets(data):
         sheet = client.open_by_key(spreadsheet_id).sheet1
         print(f"[Sheets] Connected to spreadsheet: {spreadsheet_id}")
 
-        # Find header row (assume "Date" is in column A)
-        header_row_index = 1
-        all_values = sheet.get_all_values()
-        for i, row in enumerate(all_values):
-            if row and row[0].strip().lower() == "date":
-                header_row_index = i + 1
-                break
-
-        insert_index = header_row_index + 1
-
-        # Compose row
+        # Compose new row
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         row = [
             timestamp,
@@ -53,8 +43,9 @@ def log_to_sheets(data):
             data.get("link", "N/A")
         ]
 
-        sheet.insert_row(row, index=insert_index)
-        print(f"[Sheets] Inserted row below header (row {insert_index}): {row}")
+        # Always insert at row 4 (column B to E)
+        sheet.insert_row(row, index=4, value_input_option="RAW")
+        print("[Sheets] Inserted new row at row 4 (B–E):", row)
 
     except Exception as e:
         print(f"[Sheets] ERROR while logging to Sheets: {e}")
