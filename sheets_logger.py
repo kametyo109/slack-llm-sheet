@@ -1,52 +1,68 @@
 import os
-import datetime
-import base64
-import gspread
-from google.oauth2.service_account import Credentials
+import openai
+import requests
+from bs4 import BeautifulSoup
 
-def log_to_sheets(data):
-    spreadsheet_id = os.getenv("SPREADSHEET_ID")
-    if not spreadsheet_id:
-        print("[Sheets] ERROR: SPREADSHEET_ID environment variable not set.")
-        return
+# Create the OpenAI client using the API key from environment
+client = openai.OpenAI()
+
+def fetch_page_metadata(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        title = soup.title.string.strip() if soup.title else "No Title Found"
+        meta_desc_tag = soup.find("meta", attrs={"name": "description"}) or \
+                        soup.find("meta", attrs={"property": "og:description"})
+        description = meta_desc_tag["content"].strip() if meta_desc_tag and meta_desc_tag.get("content") else "No Description Found"
+
+        return title, description
+    except Exception as e:
+        print(f"[Fetch] Failed to fetch metadata from {url}: {e}")
+        return None, None
+
+def summarize_webpage(url):
+    print(f"[LLM] Summarizing webpage: {url}")
+    title, description = fetch_page_metadata(url)
+
+    if not title and not description:
+        return None  # Exit early if nothing to summarize
+
+    # Construct the prompt
+    prompt = (
+        "You are a helpful assistant that summarizes Slack app pages.\n"
+        f"URL: {url}\n"
+        f"Title: {title}\n"
+        f"Description: {description}\n"
+        "Return a JSON object with the following fields: title, description, and link. "
+        "Make it concise and informative for logging into a spreadsheet."
+    )
 
     try:
-        # Load credentials
-        creds_base64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
-        if creds_base64:
-            creds_path = "/tmp/credentials.json"
-            print("[Sheets] Using base64-encoded credentials from environment variable...")
-            with open(creds_path, "wb") as f:
-                f.write(base64.b64decode(creds_base64))
-        else:
-            creds_path = os.getenv("GOOGLE_CREDENTIALS_JSON", "credentials.json")
-            print(f"[Sheets] Using local credentials file at: {creds_path}")
-            if not os.path.exists(creds_path):
-                print(f"[Sheets] ERROR: Credentials file not found at {creds_path}")
-                return
-
-        # Authenticate
-        creds = Credentials.from_service_account_file(
-            creds_path,
-            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a concise Slack app explainer."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4
         )
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(spreadsheet_id).sheet1
-        print(f"[Sheets] Connected to spreadsheet: {spreadsheet_id}")
 
-        # Compose new row
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        row = [
-            "",  # Column A is left blank to align with headers starting at B
-            timestamp,
-            data.get("title", "N/A"),
-            data.get("description", "N/A"),
-            data.get("link", "N/A")
-        ]
+        output = response.choices[0].message.content.strip()
+        print("[LLM] Response:", output)
 
-        # Insert at row 4, pushing down old entries
-        sheet.insert_row(row, index=4, value_input_option="RAW")
-        print("[Sheets] Inserted new row at row 4 (columns B–E):", row[1:])
-
+        # Try to eval the string to convert to dict (be cautious with unknown input)
+        result = eval(output, {"__builtins__": {}})
+        if isinstance(result, dict) and "title" in result and "description" in result:
+            result["link"] = url
+            return result
+        else:
+            print("[LLM] Invalid format from LLM.")
+            return None
     except Exception as e:
-        print(f"[Sheets] ERROR while logging to Sheets: {e}")
+        print(f"[LLM] Failed to summarize webpage: {e}")
+        return None
