@@ -37,15 +37,16 @@ def log_to_sheets(data):
         # Compose new row
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         row = [
+            "",  # Column A is left blank to align with headers starting at B
             timestamp,
             data.get("title", "N/A"),
             data.get("description", "N/A"),
             data.get("link", "N/A")
         ]
 
-        # Always insert at row 4 (column B to E)
+        # Insert at row 4, pushing down old entries
         sheet.insert_row(row, index=4, value_input_option="RAW")
-        print("[Sheets] Inserted new row at row 4 (B–E):", row)
+        print("[Sheets] Inserted new row at row 4 (columns B–E):", row[1:])
 
     except Exception as e:
         print(f"[Sheets] ERROR while logging to Sheets: {e}")
