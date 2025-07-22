@@ -2,6 +2,7 @@ import os
 import openai
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
 # Set up the OpenAI client
 client = openai.OpenAI()
